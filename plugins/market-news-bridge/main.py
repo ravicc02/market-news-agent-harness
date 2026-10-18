@@ -169,7 +169,8 @@ class MarketNews(Star):
                     if action=='poll':
                         await self._poll_now();result={'status':'ok','summary':self.status()}
                     elif action=='test':
-                        source=self.sources['feeds'][0]
+                        source=next((s for s in self.sources['feeds'] if s['id']==request.get('source_id',self.sources['feeds'][0]['id'])),None)
+                        if source is None:raise ValueError('Test source must be an active configured source')
                         _,_,_,rows=await asyncio.to_thread(self.collector.discover,source,self.sources)
                         chosen=next((row for row in rows if '国际黄金' in row['categories']),next((row for row in rows if row['categories']),None))
                         if not chosen:raise RuntimeError('No current fixed-source article available for test')
