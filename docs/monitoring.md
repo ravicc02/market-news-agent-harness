@@ -2,7 +2,7 @@
 
 ## 流程
 
-RSS 插件每两分钟检查 `docs/sources.md` 的四个固定来源。
+RSS 插件每两分钟检查 `docs/sources.md` 的9 个 RSS 订阅（7 个网站）。
 Market News 桥按链接去重；首次只记录基线，只有后续新条目进入队列。
 下载正文到 `data/raw/YYYY-MM-DD/`，然后触发 AstrBot 当前主 Agent。
 Agent 按 `docs/event-task.md` 写整理稿、快讯和运行记录。
@@ -30,3 +30,5 @@ RSS 本地补丁修复时区解析、可选摘要和 TLS 校验，并将本会�
 
 检查间隔不等于完整送达延迟，还包括来源更新、正文下载和 Agent 整理时间。
 电脑、Docker 和网络保持运行才会持续监测。
+
+新增订阅和样例正文验证见 `docs/source-validation.md`。正文与带时区日期未通过验证的来源不启用。

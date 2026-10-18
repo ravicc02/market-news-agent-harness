@@ -76,7 +76,16 @@ def parse_time(text):
 
 def categories(text, conf):
     text = text.casefold()
-    return [name for name, words in conf['keywords'].items() if any(word.casefold() in text for word in words)]
+    def matches(word):
+        word = word.casefold()
+        # Sites use EUR/USD, EURUSD and EUR-USD for the same pair.
+        if re.fullmatch(r"[a-z]{3}/[a-z]{3}", word):
+            base, quote = word.split("/")
+            return bool(re.search(r"(?<![a-z])" + base + r"[\s/-]?" + quote + r"(?![a-z])", text))
+        if word.isascii():
+            return bool(re.search(r"(?<![a-z0-9])" + re.escape(word) + r"(?![a-z0-9])", text))
+        return word in text
+    return [name for name, words in conf['keywords'].items() if any(matches(word) for word in words)]
 
 
 def discover(source, conf):
@@ -91,8 +100,8 @@ def discover(source, conf):
             continue
         timestamp = parse_time(date)
         kinds = categories(title + ' ' + description, conf)
-        if source['id'] in ('fed', 'ecb') and not kinds:
-            kinds = ['外汇货币对直盘']
+        if not kinds:
+            kinds = list(source.get('default_categories', ['外汇货币对直盘'] if source['id'] in ('fed', 'ecb') else []))
         rows.append({'source_id': source['id'], 'source': source['name'], 'title': title, 'url': url,
                      'published_original': date, 'published_at': timestamp.isoformat() if timestamp else None,
                      'categories': kinds, 'feed_summary_html': description})
@@ -134,9 +143,10 @@ def clean_body(raw, source):
     if container:
         for element in container.find_all(['p', 'h2', 'h3', 'li']):
             text = ' '.join(element.get_text(' ', strip=True).split())
-            if len(text) >= 40 and text not in paragraphs:
+            if len(text) >= source.get('min_paragraph_characters', 40) and text not in paragraphs:
                 paragraphs.append(text)
-    good = len(paragraphs) >= 3 and sum(map(len, paragraphs)) >= 500
+    good = (len(paragraphs) >= source.get('min_body_paragraphs', 3)
+            and sum(map(len, paragraphs)) >= source.get('min_body_characters', 500))
     return paragraphs, links, ('partial_text' if restricted else 'full_text') if good else None
 
 

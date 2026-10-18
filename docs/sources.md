@@ -8,15 +8,31 @@
 
 | 类别 | 搜索重点 | 首选来源 |
 |---|---|---|
-| 国际黄金 | 黄金、XAU、美元、利率和直接相关事件 | FXStreet；美联储、ECB 原始公告作补充依据 |
+| 国际黄金 | 黄金、XAU、美元、利率和直接相关事件 | FXStreet、investingLive、MarketPulse；美联储、ECB 原始公告作补充依据 |
 | 白银 | 白银、XAG、工业需求和直接相关事件 | FXStreet；相关官方公告 |
-| 原油 | WTI、Brent、供需、库存、OPEC | EIA；FXStreet，必要时搜索 OPEC 原始页面 |
-| 外汇直盘 | 七大美元直盘及相关央行政策、统计 | FXStreet；美联储、ECB |
-| 交叉盘 | 具体交叉盘，以及组成货币的事件 | FXStreet；对应央行和统计机构 |
+| 原油 | WTI、Brent、供需、库存、OPEC | OilPrice、EIA、FXStreet、investingLive；必要时搜索 OPEC 原始页面 |
+| 外汇直盘 | 七大美元直盘及相关央行政策、统计 | FXStreet、investingLive、MarketPulse；美联储、ECB |
+| 交叉盘 | 具体交叉盘，以及组成货币的事件 | FXStreet、investingLive 技术分析；对应央行和统计机构 |
 
 关键词只是发现线索。Agent 阅读后决定真实相关性，不因词语出现就一定采用。
 固定源未覆盖某类时，可以使用已有搜索或网页工具补充，保留原始来源和发布时间。
 不要给每个货币对硬凑新闻。
+
+## 已验证的 RSS 扩展
+
+当前是 9 个 RSS 订阅、7 个网站。investingLive 使用新闻、技术分析和央行动态三个独立订阅。
+2026-10-19 已在实例环境验证新增 RSS 的条目、带时区发布时间和样例正文；详情见 `docs/source-validation.md`。
+
+- investingLive：使用 `.article-body-normal`，只提取正文区域；支持短快讯，不把导航或页脚当正文。
+- OilPrice：使用 `#article-content` 提取正文，排除作者侧栏。
+- MarketPulse：使用 `.post-body` 提取完整正文区域。
+- 投资新闻中的 EURUSD、USDJPY 等紧连写法也用于候选分类，原油关键词按英文词边界匹配。
+- RSS 返回成功只表示这次可读，不代表持续可用或一定有最近一天的更新。
+- 首次加入只记历史基线，不发旧闻。跨订阅相同 URL 沿用现有去重规则。
+
+Investing.com 本次 RSS 缺少时区且样例正文返回 403，因此未启用。
+金十、财联社和 Newsquawk 未发现已验证可用的公开 RSS；Rigzone 和 Kitco 本次候选地址也未通过验证。
+现有 FXStreet 本次返回 403，保留来源与错误状态，未绕过访问限制。
 
 ## 怎么取
 
@@ -112,6 +128,78 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       "selectors": [
         ".tie-article"
       ]
+    },
+    {
+      "id": "investinglive_news",
+      "name": "investingLive News",
+      "url": "https://investinglive.com/feed/news/",
+      "domains": [
+        "investinglive.com",
+        "www.investinglive.com"
+      ],
+      "selectors": [
+        ".article-body-normal"
+      ],
+      "min_paragraph_characters": 20,
+      "min_body_paragraphs": 1,
+      "min_body_characters": 120
+    },
+    {
+      "id": "investinglive_technical",
+      "name": "investingLive Technical Analysis",
+      "url": "https://investinglive.com/feed/technicalanalysis/",
+      "domains": [
+        "investinglive.com",
+        "www.investinglive.com"
+      ],
+      "selectors": [
+        ".article-body-normal"
+      ],
+      "min_paragraph_characters": 20,
+      "min_body_paragraphs": 1,
+      "min_body_characters": 120
+    },
+    {
+      "id": "investinglive_centralbank",
+      "name": "investingLive Central Banks",
+      "url": "https://investinglive.com/feed/centralbank/",
+      "domains": [
+        "investinglive.com",
+        "www.investinglive.com"
+      ],
+      "selectors": [
+        ".article-body-normal"
+      ],
+      "min_paragraph_characters": 20,
+      "min_body_paragraphs": 1,
+      "min_body_characters": 120,
+      "default_categories": [
+        "外汇货币对直盘"
+      ]
+    },
+    {
+      "id": "oilprice",
+      "name": "OilPrice",
+      "url": "https://oilprice.com/rss/main",
+      "domains": [
+        "oilprice.com",
+        "www.oilprice.com"
+      ],
+      "selectors": [
+        "#article-content"
+      ]
+    },
+    {
+      "id": "marketpulse",
+      "name": "MarketPulse",
+      "url": "https://www.marketpulse.com/feed/",
+      "domains": [
+        "www.marketpulse.com",
+        "marketpulse.com"
+      ],
+      "selectors": [
+        ".post-body"
+      ]
     }
   ],
   "keywords": {
@@ -137,7 +225,11 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       "petroleum",
       "oil production",
       "oil inventories",
-      "原油"
+      "原油",
+      "oil",
+      "energy inventories",
+      "refinery",
+      "hormuz"
     ],
     "外汇货币对直盘": [
       "eur/usd",
@@ -162,7 +254,16 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       "monetary policy",
       "discount rate",
       "美元",
-      "外汇"
+      "外汇",
+      "fed",
+      "bank of japan",
+      "bank of england",
+      "rba",
+      "rbnz",
+      "ecb",
+      "boj",
+      "boe",
+      "boc"
     ],
     "交叉盘": [
       "eur/jpy",

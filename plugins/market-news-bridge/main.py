@@ -73,7 +73,7 @@ class MarketNews(Star):
         for item in items:
             title=str(item.title or '');description=str(item.description or '')
             kinds=self.collector.categories(title+' '+description,self.sources)
-            if source['id'] in ('fed','ecb') and not kinds:kinds=['外汇货币对直盘']
+            if not kinds:kinds=list(source.get('default_categories',['外汇货币对直盘'] if source['id'] in ('fed','ecb') else []))
             try:url=self.collector.checked_url(item.link,source['domains'])
             except ValueError:continue
             rows.append({'source_id':source['id'],'source':source['name'],'title':title,'url':url,'published_original':item.pubDate,'published_timestamp':item.pubDate_timestamp,'published_at':datetime.fromtimestamp(item.pubDate_timestamp,timezone.utc).isoformat() if item.pubDate_timestamp else None,'categories':kinds,'feed_summary_html':description})
@@ -222,7 +222,7 @@ class MarketNews(Star):
     async def market_status(self,event:AstrMessageEvent):
         if event.unified_msg_origin!=self.target:return
         status=self.status()
-        yield event.plain_result('新闻监测已启用；每两分钟检查。\n基线来源：'+str(len(status['feeds']))+'\n任务状态：'+json.dumps(status['jobs'],ensure_ascii=False)+'\n当前任务：'+str(status['running_job']))
+        yield event.plain_result('新闻监测已启用；每两分钟检查。\nRSS订阅：'+str(len(self.sources['feeds']))+'；网站：'+str(len({source['domains'][0] for source in self.sources['feeds']}))+'\n基线来源：'+str(len(status['feeds']))+'\n任务状态：'+json.dumps(status['jobs'],ensure_ascii=False)+'\n当前任务：'+str(status['running_job']))
 
     @market.command('check')
     async def market_check(self,event:AstrMessageEvent):
