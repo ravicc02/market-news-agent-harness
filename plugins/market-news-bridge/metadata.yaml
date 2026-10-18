@@ -1,0 +1,5 @@
+name: astrbot_plugin_market_news
+desc: 固定财经 RSS 发现新条目后调用当前 AstrBot Agent 阅读正文并主动推送
+version: v0.1.0
+author: Local
+display_name: Market News Agent Bridge

@@ -1,0 +1,11 @@
+data/
+reports/
+runs/
+archive/
+logs/
+state/
+__pycache__/
+*.pyc
+.env
+.env.*
+*.sqlite3

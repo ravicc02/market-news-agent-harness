@@ -1,0 +1,195 @@
+# 来源与搜索范围
+
+## 搜什么
+
+目标是国际黄金、白银、WTI、Brent，以及主要外汇直盘和交叉盘的新闻与原始公告。
+优先执行前 24 小时；周末或资料不足可扩展到 72 小时，保留实际发布时间。
+来源没有更新或访问失败都应保留状态。时间未知的文章不混入严格时间窗口。
+
+| 类别 | 搜索重点 | 首选来源 |
+|---|---|---|
+| 国际黄金 | 黄金、XAU、美元、利率和直接相关事件 | FXStreet；美联储、ECB 原始公告作补充依据 |
+| 白银 | 白银、XAG、工业需求和直接相关事件 | FXStreet；相关官方公告 |
+| 原油 | WTI、Brent、供需、库存、OPEC | EIA；FXStreet，必要时搜索 OPEC 原始页面 |
+| 外汇直盘 | 七大美元直盘及相关央行政策、统计 | FXStreet；美联储、ECB |
+| 交叉盘 | 具体交叉盘，以及组成货币的事件 | FXStreet；对应央行和统计机构 |
+
+关键词只是发现线索。Agent 阅读后决定真实相关性，不因词语出现就一定采用。
+固定源未覆盖某类时，可以使用已有搜索或网页工具补充，保留原始来源和发布时间。
+不要给每个货币对硬凑新闻。
+
+## 怎么取
+
+先将执行目录设为本工作区，再运行：
+
+```sh
+python tools/fetch-news.py
+```
+
+需要明确扩大到最近 72 小时时：
+
+```sh
+python tools/fetch-news.py --hours 72
+```
+
+等待命令结束；若工具返回运行中的会话，继续等同一会话，不重复启动。
+脚本设置单次网络超时和总量上限，任务工具可给约 300 秒执行窗口。
+资料落到 `data/raw/YYYY-MM-DD/<batch-id>/`，返回目录和采集状态。
+先读批次的 `index.md` 和 `collection.json`，再读有用的原文。
+采集器不调用模型、不生成摘要、不推断走势、不发消息。
+当前脚本需要容器中已有的 BeautifulSoup 和 lxml；缺少时用网页工具采集，不在定时任务中临时安装。
+
+访问 403、付费或验证码时保留失败记录，不当成读过正文。
+EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agent 应据正文筛选。
+央行公告有纪要链接时继续读实际纪要，脚本会尝试官方 HTML 文档。
+
+## 行情补充
+
+新闻是主体。走势分析需要核验报价时，Agent 可使用现有联网工具访问：
+
+- ECB：`https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist-90d.xml`，日度参考汇率。
+- EIA：`https://www.eia.gov/dnav/pet/PET_PRI_SPT_S1_D.htm`，WTI、Brent 日度现货。
+- 贵金属：从公开报价页核对现货或期货标识；只有 COMEX 期货时必须注明。
+
+补充的行情资料同样保存到本次原文目录，并记录链接、日期与口径。
+没有可核实行情时只做新闻因素分析，不能凭模型记忆填写价格。
+
+## 脚本读取的来源设置
+
+下面 JSON 是脚本唯一来源配置。Agent 也可直接阅读，不另维护一份配置文件。
+
+```json
+{
+  "timezone": "Asia/Shanghai",
+  "lookback_hours": 24,
+  "fallback_hours": 72,
+  "max_feed_items": 30,
+  "max_articles_per_source": 4,
+  "max_articles_total": 12,
+  "timeout_seconds": 15,
+  "max_response_bytes": 4000000,
+  "feeds": [
+    {
+      "id": "fxstreet",
+      "name": "FXStreet",
+      "url": "https://www.fxstreet.com/rss/news",
+      "domains": [
+        "www.fxstreet.com"
+      ],
+      "selectors": [
+        "article"
+      ]
+    },
+    {
+      "id": "fed",
+      "name": "美联储",
+      "url": "https://www.federalreserve.gov/feeds/press_monetary.xml",
+      "domains": [
+        "www.federalreserve.gov"
+      ],
+      "selectors": [
+        "#article"
+      ]
+    },
+    {
+      "id": "ecb",
+      "name": "欧洲央行",
+      "url": "https://www.ecb.europa.eu/rss/press.html",
+      "domains": [
+        "www.ecb.europa.eu"
+      ],
+      "selectors": [
+        "main"
+      ]
+    },
+    {
+      "id": "eia",
+      "name": "EIA",
+      "url": "https://www.eia.gov/rss/todayinenergy.xml",
+      "domains": [
+        "www.eia.gov"
+      ],
+      "selectors": [
+        ".tie-article"
+      ]
+    }
+  ],
+  "keywords": {
+    "国际黄金": [
+      "gold",
+      "gold bullion",
+      "xau",
+      "黄金"
+    ],
+    "白银": [
+      "silver",
+      "xag",
+      "白银"
+    ],
+    "原油": [
+      "crude",
+      "brent",
+      "wti",
+      "opec",
+      "oil price",
+      "oil supply",
+      "oil demand",
+      "petroleum",
+      "oil production",
+      "oil inventories",
+      "原油"
+    ],
+    "外汇货币对直盘": [
+      "eur/usd",
+      "gbp/usd",
+      "aud/usd",
+      "nzd/usd",
+      "usd/jpy",
+      "usd/chf",
+      "usd/cad",
+      "dollar",
+      "forex",
+      "greenback",
+      "euro",
+      "sterling",
+      "yen",
+      "kiwi",
+      "aussie",
+      "swiss franc",
+      "canadian dollar",
+      "federal open market",
+      "fomc",
+      "monetary policy",
+      "discount rate",
+      "美元",
+      "外汇"
+    ],
+    "交叉盘": [
+      "eur/jpy",
+      "gbp/jpy",
+      "eur/gbp",
+      "eur/chf",
+      "eur/aud",
+      "eur/cad",
+      "eur/nzd",
+      "gbp/chf",
+      "gbp/aud",
+      "gbp/cad",
+      "gbp/nzd",
+      "aud/jpy",
+      "aud/chf",
+      "aud/cad",
+      "aud/nzd",
+      "nzd/jpy",
+      "nzd/chf",
+      "nzd/cad",
+      "cad/jpy",
+      "cad/chf",
+      "chf/jpy",
+      "cross currency",
+      "cross-currency",
+      "交叉盘"
+    ]
+  }
+}
+```

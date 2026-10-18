@@ -1,0 +1,90 @@
+diff --git a/_conf_schema.json b/_conf_schema.json
+index 3fc2b49..45c0659 100644
+--- a/_conf_schema.json
++++ b/_conf_schema.json
+@@ -63,5 +63,10 @@
+                 "default": 3
+             }
+         }
++    },
++    "delegate_sessions": {
++        "description": "由本地 Market News 桥处理的会话；避免直接发送 RSS 摘要",
++        "type": "list",
++        "default": []
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/main.py b/main.py
+index 5b66c4b..780ac3f 100644
+--- a/main.py
++++ b/main.py
+@@ -3,6 +3,7 @@ import asyncio
+ import time
+ import re
+ import logging
++from dateutil import parser as date_parser
+ from lxml import etree
+ from apscheduler.schedulers.asyncio import AsyncIOScheduler
+ 
+@@ -65,7 +66,7 @@ class RssPlugin(Star):
+         headers = {
+         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+         }
+-        connector = aiohttp.TCPConnector(ssl=False)
++        connector = aiohttp.TCPConnector()
+         timeout = aiohttp.ClientTimeout(total=30, connect=10)
+         try:
+             async with aiohttp.ClientSession(trust_env=True,
+@@ -101,6 +102,16 @@ class RssPlugin(Star):
+         last_update = self.data_handler.data[url]["subscribers"][user]["last_update"]
+         latest_link = self.data_handler.data[url]["subscribers"][user]["latest_link"]
+         max_items_per_poll = self.max_items_per_poll
++        # Local integration: monitored finance sessions hand off to the native Agent bridge.
++        # Fail closed if the bridge is unavailable; do not send raw RSS summaries.
++        if user in self.config.get("delegate_sessions", []):
++            handler = getattr(self.context, "_market_news_handler", None)
++            if handler is None:
++                self.logger.warning("Market news bridge unavailable; RSS delivery paused")
++                return
++            items = await self.poll_rss(url, num=100, after_timestamp=0, after_link="")
++            await handler.ingest(url, user, items)
++            return
+         # 拉取 RSS
+         rss_items = await self.poll_rss(
+             url,
+@@ -196,7 +207,7 @@ class RssPlugin(Star):
+                 if not re.match(r"^https?://", link):
+                     link = self.data_handler.get_root_url(url) + link
+ 
+-                description = item.xpath("description")[0].text
++                description = item.findtext("description") or ""
+ 
+                 pic_url_list = self.data_handler.strip_html_pic(description)
+                 description = self.data_handler.strip_html(description)
+@@ -209,11 +220,11 @@ class RssPlugin(Star):
+                 if item.xpath("pubDate"):
+                     # 根据 pubDate 判断是否为新内容
+                     pub_date = item.xpath("pubDate")[0].text
+-                    pub_date_parsed = time.strptime(
+-                        pub_date.replace("GMT", "+0000"),
+-                        "%a, %d %b %Y %H:%M:%S %z",
+-                    )
+-                    pub_date_timestamp = int(time.mktime(pub_date_parsed))
++                    parsed = date_parser.parse(pub_date, tzinfos={"EST": -18000, "EDT": -14400, "GMT": 0, "UTC": 0})
++                    if parsed.tzinfo is None:
++                        self.logger.warning("RSS item has an unknown timezone; skip")
++                        continue
++                    pub_date_timestamp = int(parsed.timestamp())
+                     if pub_date_timestamp > after_timestamp:
+                         rss_items.append(
+                             RSSItem(
+@@ -245,7 +256,7 @@ class RssPlugin(Star):
+ 
+             except Exception as e:
+                 self.logger.error(f"rss: 解析Rss条目 {url} 失败: {str(e)}")
+-                break
++                continue
+ 
+         return rss_items
+ 
