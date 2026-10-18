@@ -1,1 +1,1 @@
-For a market-news event, read `docs/AGENTS.md` and `docs/event-task.md`; the active monitor invokes the native Agent and writes the event outputs.
+金融新闻事件先读取 `docs/AGENTS.md`，再按 `docs/event-task.md` 和事件指定原文制作单篇“新消息快讯”。监测插件负责投递，Agent 不直接发送。所有路径相对于当前工作区。正常问答按用户当下问题回答。

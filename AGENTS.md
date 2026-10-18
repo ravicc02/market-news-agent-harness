@@ -1,1 +1,1 @@
-Read `docs/AGENTS.md` first. All paths in this repository are relative to the repository root.
+先读取 `docs/AGENTS.md`，新闻事件按 `docs/event-task.md` 执行。所有文档路径均相对于工作区根目录。

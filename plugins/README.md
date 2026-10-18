@@ -20,7 +20,7 @@ Install the pinned upstream RSS checkout as `astrbot_plugin_rss` in AstrBot's pl
 
 Configure both plugins in AstrBot. Use `plugins/market-news-config.example.json` as the bridge example. Set the RSS plugin's `delegate_sessions` list to the same target session; keep raw RSS forwarding disabled for that target. The bridge registers the configured source subscriptions from `docs/sources.md` and restores the configured checking interval at startup.
 
-Restart or reload the plugins. Confirm `/market status` reports initialized sources. The first source pass records a historical baseline and does not send existing articles. A subsequent unseen and eligible URL enters the Agent queue.
+Restart or reload the plugins. Confirm `/market status` reports initialized sources. The first source pass records a historical baseline and does not send existing articles. A subsequent unseen and eligible URL enters the Agent queue. Each event follows `docs/event-task.md` and `docs/news-flash-template.md` to produce one “新消息快讯”; the bridge delivers the saved output. No daily digest task is required.
 
 The bridge uses native AstrBot integration points verified against the version above. Revalidate the bridge and local patch before upgrading AstrBot or the RSS plugin.
 

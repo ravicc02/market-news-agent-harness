@@ -1,36 +1,46 @@
-# 新闻事件监测
+# 新消息快讯监测规则
 
-## 流程
+## 发现与入队
 
-RSS 插件每两分钟检查 `docs/sources.md` 的 12 个有效 RSS 订阅（10 个网站）。
-Market News 桥按链接去重；首次只记录基线，只有后续新条目进入队列。
-下载正文到 `data/raw/YYYY-MM-DD/`，然后触发 AstrBot 当前主 Agent。
-Agent 按 `docs/event-task.md` 写整理稿、快讯和运行记录。
-插件读取快讯文件，主动发送到已绑定的个人微信会话。
+RSS 插件每两分钟轮询 `docs/sources.md` 的 12 个有效订阅（10 个网站）。事件桥按规范化链接去重，移除常见跟踪参数；同一接收会话跨订阅共享去重状态。
+首次加入来源时只记录历史基线，已有条目不推送。后续未见链接才检查品种相关性和发布时间。
+普通事件要求发布时间有效、不早于发现前 24 小时，且不超过当前时间 5 分钟；不因新闻少或周末而扩大窗口。
+入队时的关键词只是候选分类，Agent 读正文后仍可跳过不相关内容。来源失败保留错误，不将失败描述成没有新闻。
 
-## 状态
+暂停来源放在 `docs/sources.md` 的 `paused_feeds`。插件启动时移除本会话对应暂停来源的订阅，保留历史去重状态；恢复时不能清空基线重发旧闻。
 
-运行状态见 `runs/monitor-status.json`，也可在绑定微信中发送 `/market status`。
-`/market check` 手动检查来源，不补发已处理内容。
+## Agent 实际执行
 
-- QUEUED：待处理。
-- RUNNING：主 Agent 正在阅读整理。
-- RENDERED：快讯已保存。
-- BLOCKED_CONTEXT：登录或微信会话上下文不足；用户发消息刷新后再尝试投递。
-- ADAPTER_ACCEPTED：微信适配器完成发送调用，不代表用户已读。
-- UNKNOWN：发送超时或中断，无法确定结果，不自动重发。
-- FAILED／SKIPPED／EXPIRED：失败、不相关或过期，不反复刷屏。
+1. 插件为新条目建持久任务，下载原文到 `data/raw/YYYY-MM-DD/<job-id>-a<attempt>/`。
+2. 插件生成 `runs/YYYY-MM-DD/events/<job-id>.json`，写入原文元数据及三个输出路径。
+3. 触发当前 AstrBot 主 Agent，读取 `docs/AGENTS.md`、`docs/event-task.md`、来源范围、整理规则和指定原文。
+4. Agent 保存单篇整理稿，按 `docs/news-flash-template.md` 保存“新消息快讯”，并写执行记录。
+5. 插件核对整理稿中的原文路径，以及快讯中的必需字段、真实链接、长度和正文范围标记，再读取已保存快讯投递微信。
 
-## 插件
+Agent 不调用子代理、额外模型、联网或消息工具，只读规则与资料、写三个指定输出。
+每次只处理一个事件，不创建多品种汇总，不等待每日固定时点。没有新条目时继续轮询，不生成空快讯。
+从发现到发送还需要排队、正文下载和 Agent 整理；两分钟是检查间隔，不是送达保证。
 
-实例安装 `astrbot_plugin_rss` 与 `astrbot_plugin_market_news`。
-前者负责 RSS 调度和解析，后者负责本工作区衔接与发送去重。
-RSS 本地补丁修复时区解析、可选摘要和 TLS 校验，并将本会话交给事件桥，防止标题摘要直接推送。
-上游插件升级前检查本地补丁；部署版本和验证记录保存在 `runs/`。
+## 状态与异常
 
-检查间隔不等于完整送达延迟，还包括来源更新、正文下载和 Agent 整理时间。
-电脑、Docker 和网络保持运行才会持续监测。
+状态在 `runs/monitor-status.json`，逐源的检查时间、RSS 条数、候选数和新入队数在 `runs/poll-log.jsonl`。
+微信命令 `/market status` 查看状态；`/market check` 主动检查来源，发现符合条件的新条目仍可入队，但不会重发已处理链接。
 
-新增订阅和样例正文验证见 `docs/source-validation.md`。正文与带时区日期未通过验证的来源不启用。
+- `QUEUED`：待处理。
+- `RUNNING`：Agent 正在阅读与整理。
+- `RENDERED`：快讯已保存，待投递。
+- `BLOCKED_CONTEXT`：微信登录或会话上下文不足，刷新会话后再尝试投递。
+- `SENDING`：正在调用平台发送。
+- `ADAPTER_ACCEPTED`：适配器接受发送调用，不代表已经送达或已读。
+- `UNKNOWN`：发送中断等原因导致结果不确定，不自动重发。
+- `FAILED`、`SKIPPED`、`EXPIRED`：失败、不相关或过期，保留原因。
 
-暂停来源放在 `docs/sources.md` 的 `paused_feeds`，不会继续注册轮询任务。历史去重记录保留，恢复时不清空基线。
+普通排队任务受 `max_queue_age_minutes` 限制，当前配置示例为 120 分钟；处理失败的重试受插件限制。
+首次基线、链接去重、任务状态及投递结果由实例收件箱保存，文档更新不清空这些状态。
+
+## 插件与运行条件
+
+实例使用 `astrbot_plugin_rss` 和 `astrbot_plugin_market_news`。RSS 插件负责调度和解析，事件桥负责收件箱、下载、Agent 调用和统一投递。
+RSS 本地补丁将本会话交给事件桥，避免原始标题摘要另行直推，并保留 TLS 校验和日期解析处理。
+安装与版本见 `plugins/README.md`，来源验证见 `docs/source-validation.md`。升级插件前检查本地补丁与集成兼容性。
+电脑、Docker、AstrBot 和网络需保持运行；轮询与投递由现有插件持续执行。
