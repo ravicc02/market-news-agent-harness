@@ -17,6 +17,13 @@
 关键词只是发现线索。Agent 阅读后决定真实相关性，不因词语出现就一定采用。
 当前 Agent 只读事件指定原文，不自行搜索补充其他类别。未覆盖的品种等待后续新事件，不硬凑新闻。
 
+## 轮询分类与请求约束
+
+各订阅的 `poll_class`、`poll_minutes`、`poll_offset`、`poll_second` 是调度配置；全局 `polling` 设置同站间隔、抖动和 HTTP 退避。
+快讯 5 分钟，市场报道与技术分析 10 分钟，分析与政策解读 15 分钟，贵金属研究和央行原始公告 30 分钟，EIA 60 分钟。
+这些是本实例的保守调度选择，不代表网站更新频率或官方许可额度。具体规则见 `docs/monitoring.md`。
+同站 RSS 和正文共享限流冷却；手动检查、首次采集和处理重试也受约束。
+
 ## 已验证的 RSS 扩展
 
 当前启用 12 个 RSS 订阅、10 个网站；另保留 1 个暂停来源（FXStreet）。investingLive 使用新闻、技术分析和央行动态三个独立订阅。
@@ -85,7 +92,11 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       ],
       "selectors": [
         "#article"
-      ]
+      ],
+      "poll_class": "official",
+      "poll_minutes": 30,
+      "poll_offset": 7,
+      "poll_second": 17
     },
     {
       "id": "ecb",
@@ -96,7 +107,11 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       ],
       "selectors": [
         "main"
-      ]
+      ],
+      "poll_class": "official",
+      "poll_minutes": 30,
+      "poll_offset": 13,
+      "poll_second": 29
     },
     {
       "id": "eia",
@@ -107,7 +122,11 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       ],
       "selectors": [
         ".tie-article"
-      ]
+      ],
+      "poll_class": "official",
+      "poll_minutes": 60,
+      "poll_offset": 41,
+      "poll_second": 11
     },
     {
       "id": "investinglive_news",
@@ -122,7 +141,11 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       ],
       "min_paragraph_characters": 20,
       "min_body_paragraphs": 1,
-      "min_body_characters": 120
+      "min_body_characters": 120,
+      "poll_class": "fast_news",
+      "poll_minutes": 5,
+      "poll_offset": 0,
+      "poll_second": 5
     },
     {
       "id": "investinglive_technical",
@@ -137,7 +160,11 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       ],
       "min_paragraph_characters": 20,
       "min_body_paragraphs": 1,
-      "min_body_characters": 120
+      "min_body_characters": 120,
+      "poll_class": "market_news",
+      "poll_minutes": 10,
+      "poll_offset": 1,
+      "poll_second": 15
     },
     {
       "id": "investinglive_centralbank",
@@ -155,7 +182,11 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       "min_body_characters": 120,
       "default_categories": [
         "外汇货币对直盘"
-      ]
+      ],
+      "poll_class": "analysis",
+      "poll_minutes": 15,
+      "poll_offset": 2,
+      "poll_second": 25
     },
     {
       "id": "oilprice",
@@ -167,7 +198,11 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       ],
       "selectors": [
         "#article-content"
-      ]
+      ],
+      "poll_class": "market_news",
+      "poll_minutes": 10,
+      "poll_offset": 3,
+      "poll_second": 35
     },
     {
       "id": "marketpulse",
@@ -179,7 +214,11 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       ],
       "selectors": [
         ".post-body"
-      ]
+      ],
+      "poll_class": "market_news",
+      "poll_minutes": 10,
+      "poll_offset": 4,
+      "poll_second": 45
     },
     {
       "id": "fxempire_forecasts",
@@ -191,7 +230,11 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       ],
       "selectors": [
         "article"
-      ]
+      ],
+      "poll_class": "analysis",
+      "poll_minutes": 15,
+      "poll_offset": 6,
+      "poll_second": 10
     },
     {
       "id": "exchangerates",
@@ -203,7 +246,11 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       ],
       "selectors": [
         ".erukNewsBody"
-      ]
+      ],
+      "poll_class": "analysis",
+      "poll_minutes": 15,
+      "poll_offset": 8,
+      "poll_second": 20
     },
     {
       "id": "goldseek",
@@ -215,7 +262,11 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       ],
       "selectors": [
         ".article-text .text-long"
-      ]
+      ],
+      "poll_class": "research",
+      "poll_minutes": 30,
+      "poll_offset": 19,
+      "poll_second": 30
     },
     {
       "id": "silverseek",
@@ -231,7 +282,11 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       "include_tables": true,
       "min_paragraph_characters": 1,
       "min_body_paragraphs": 3,
-      "min_body_characters": 200
+      "min_body_characters": 200,
+      "poll_class": "research",
+      "poll_minutes": 30,
+      "poll_offset": 23,
+      "poll_second": 40
     }
   ],
   "keywords": {
@@ -343,6 +398,15 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       ],
       "reason": "RSS and article samples repeatedly returned HTTP 403 on 2026-10-19; excluded from active polling until verified recovery"
     }
-  ]
+  ],
+  "polling": {
+    "jitter_seconds": 30,
+    "minimum_request_gap_seconds": 10,
+    "rate_limit_backoff_seconds": 1800,
+    "max_rate_limit_backoff_seconds": 21600,
+    "forbidden_cooldown_seconds": 21600,
+    "transient_backoff_seconds": 300,
+    "max_transient_backoff_seconds": 3600
+  }
 }
 ```

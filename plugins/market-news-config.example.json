@@ -2,7 +2,6 @@
   "enabled": true,
   "workspace": "<WORKSPACE_ROOT>",
   "target_session": "<PLATFORM_ID>:FriendMessage:<RECIPIENT_ID>",
-  "poll_cron": "*/2 * * * *",
   "max_queue_age_minutes": 120,
   "agent_timeout_seconds": 600
 }

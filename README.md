@@ -9,7 +9,7 @@ RSS polling -> new-link deduplication -> article download -> native AstrBot Agen
 -> processed article + single news flash + run note -> bridge delivery
 ```
 
-The first source bootstrap records existing items as a baseline. Subsequent unseen, eligible links enter the queue individually. Sources are currently polled every two minutes; actual delivery also takes article download and Agent processing time. Each event produces one news flash. No scheduled digest is generated.
+The first source bootstrap records existing items as a baseline. Subsequent unseen, eligible links enter the queue individually. Sources use staggered polling intervals of 5–60 minutes by source type; actual delivery also takes article download and Agent processing time. RSS and article requests share per-site request spacing and persistent HTTP cooldowns. Each event produces one news flash. No scheduled digest is generated.
 
 The Agent reads `docs/AGENTS.md`, `docs/event-task.md`, `docs/processing-rules.md`, and `docs/news-flash-template.md`. It reads only the event's downloaded article, saves the three specified outputs, and returns the saved flash. The bridge handles delivery.
 

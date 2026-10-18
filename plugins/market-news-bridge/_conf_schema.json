@@ -14,11 +14,6 @@
     "description": "绑定的微信会话原始 UMO",
     "default": ""
   },
-  "poll_cron": {
-    "type": "string",
-    "description": "RSS 检查频率；当前由 RSS 插件订阅配置执行",
-    "default": "*/2 * * * *"
-  },
   "max_queue_age_minutes": {
     "type": "int",
     "description": "排队新闻过期时间，避免恢复后补发旧新闻",

@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 UTC = timezone.utc
+REQUEST_POLICY = None
 
 
 def now():
@@ -51,13 +52,15 @@ class SourceRedirect(HTTPRedirectHandler):
 
 def download(url, source, conf):
     url = checked_url(url, source['domains'])
-    request = Request(url, headers={'User-Agent': 'MarketBriefing/1.0 (personal RSS reader)', 'Accept': '*/*'})
-    with build_opener(SourceRedirect(source['domains'])).open(request, timeout=conf['timeout_seconds']) as response:
-        checked_url(response.geturl(), source['domains'])
-        raw = response.read(conf['max_response_bytes'] + 1)
-        if len(raw) > conf['max_response_bytes']:
-            raise ValueError('Response exceeds configured byte limit')
-        return raw, response.geturl()
+    def operation():
+        request = Request(url, headers={'User-Agent': 'MarketNewsAgent/1.0 (personal RSS reader)', 'Accept': '*/*'})
+        with build_opener(SourceRedirect(source['domains'])).open(request, timeout=conf['timeout_seconds']) as response:
+            checked_url(response.geturl(), source['domains'])
+            raw = response.read(conf['max_response_bytes'] + 1)
+            if len(raw) > conf['max_response_bytes']:
+                raise ValueError('Response exceeds configured byte limit')
+            return raw, response.geturl()
+    return REQUEST_POLICY.fetch(url, source, operation) if REQUEST_POLICY else operation()
 
 
 def parse_time(text):
@@ -199,6 +202,8 @@ def retrieve(row, source, conf, batch):
             meta['text_path'] = path.relative_to(ROOT).as_posix()
             meta['text_sha256'] = sha256(path.read_bytes()).hexdigest()
     except Exception as exc:
+        if getattr(exc, 'retry_at', None):
+            meta.update(retry_at=exc.retry_at, http_status=getattr(exc, 'status', None))
         meta.update(content_level='blocked', error=type(exc).__name__ + ': ' + str(exc)[:200])
     write_json(bodies_dir / f'{article_id}.json', meta)
     return meta

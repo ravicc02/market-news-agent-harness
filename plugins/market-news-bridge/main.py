@@ -9,6 +9,7 @@ from astrbot.api.event import filter,AstrMessageEvent,MessageChain
 import astrbot.api.message_components as Comp
 from .state import Inbox
 from .agent import run_editor
+from .polling import RequestPolicy, DeferredRequest, schedule
 
 
 @register('astrbot_plugin_market_news','Local','Financial news RSS-to-Agent bridge','0.1.0')
@@ -26,6 +27,12 @@ class MarketNews(Star):
         spec=importlib.util.spec_from_file_location('market_news_collector',self.workspace/'tools/fetch-news.py')
         self.collector=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.collector)
         self.sources=self.collector.settings()
+        self.http=RequestPolicy(self.data_dir/'http-state.json',self.sources.get('polling',{}))
+        self.collector.REQUEST_POLICY=self.http
+        last_checks={row['url']:row['last_check'] for row in self.inbox.summary()['feeds']}
+        for source in self.sources['feeds']:
+            schedule(source,self.sources.get('polling',{}))
+            self.http.seed_feed(source,last_checks.get(source['url']))
         self.wake=asyncio.Event();self.tasks=[];self.source_errors={};self.running=None
 
     async def initialize(self):
@@ -51,7 +58,7 @@ class MarketNews(Star):
                 if not record['subscribers']:rss.data_handler.data.pop(url,None)
         for source in self.sources['feeds']:
             record=rss.data_handler.data.setdefault(source['url'],{'info':{'title':source['name'],'description':'Financial source managed by Market News bridge'},'subscribers':{}})
-            record['subscribers'][self.target]={'cron_expr':self.config.get('poll_cron','*/2 * * * *'),'last_update':int(time.time()),'latest_link':''}
+            record['subscribers'][self.target]={**schedule(source,self.sources.get('polling',{})),'last_update':int(time.time()),'latest_link':''}
         rss.data_handler.save_data()
         rss._fresh_asyncIOScheduler()
         await self._bootstrap()
@@ -66,10 +73,12 @@ class MarketNews(Star):
         self.inbox.db.close()
 
     def status(self):
-        value={'updated_at':datetime.now(timezone.utc).isoformat(),'enabled':bool(self.config.get('enabled')),'running_job':self.running,'poll_cron':self.config.get('poll_cron'),'source_errors':self.source_errors,**self.inbox.summary()}
+        value={'updated_at':datetime.now(timezone.utc).isoformat(),'enabled':bool(self.config.get('enabled')),'running_job':self.running,'polling_mode':'per_source','source_errors':self.source_errors,**self.inbox.summary()}
         active_urls={source['url'] for source in self.sources['feeds']}
         value['feeds']=[record for record in value['feeds'] if record['url'] in active_urls]
         value['configured_feeds']=len(self.sources['feeds'])
+        value['http_policy']=self.http.summary()
+        value['poll_schedule']=[{'id':source['id'],'class':source.get('poll_class'),'minutes':source.get('poll_minutes',30),**schedule(source,self.sources.get('polling',{}))} for source in self.sources['feeds']]
         value['paused_feeds']=[{'id':source['id'],'reason':source.get('reason')} for source in self.sources.get('paused_feeds',[])]
         target=self.workspace/'runs/monitor-status.json';target.parent.mkdir(parents=True,exist_ok=True)
         temporary=target.with_suffix('.tmp');temporary.write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n',encoding='utf-8');temporary.replace(target)
@@ -93,6 +102,7 @@ class MarketNews(Star):
         async def one(source):
             if self.inbox.db.execute('SELECT 1 FROM feeds WHERE url=? AND baseline_at IS NOT NULL',(source['url'],)).fetchone():return
             try:
+                self.http.begin_poll(source)
                 _,_,_,rows=await asyncio.to_thread(self.collector.discover,source,self.sources)
                 for row in rows:row['published_timestamp']=self.collector.parse_time(row['published_original']).timestamp() if self.collector.parse_time(row['published_original']) else 0
                 self.inbox.ingest(source['url'],self.target,rows)
@@ -110,10 +120,33 @@ class MarketNews(Star):
         rows=self._rows(source,items)
         added=self.inbox.ingest(url,session,rows)
         self.source_errors.pop(source['id'],None)
-        poll_record={'source_id':source['id'],'url':url,'checked_at':datetime.now(timezone.utc).isoformat(),'rss_items':len(items),'candidate_rows':len(rows),'enqueued':len(added),'seen_urls':self.inbox.summary().get('seen_urls', 0)}
+        poll_record={'source_id':source['id'],'url':url,'checked_at':datetime.now(timezone.utc).isoformat(),'outcome':'ok','poll_minutes':source.get('poll_minutes',30),'rss_items':len(items),'candidate_rows':len(rows),'enqueued':len(added),'seen_urls':self.inbox.summary().get('seen_urls', 0)}
         with self.poll_log.open('a',encoding='utf-8') as log_file: log_file.write(json.dumps(poll_record,ensure_ascii=False)+'\n')
         logger.info('Market News poll source=%s rss_items=%d candidate_rows=%d enqueued=%d seen_urls=%d', source['id'], len(items), len(rows), len(added), poll_record['seen_urls'])
         if added:self.wake.set()
+        self.status()
+
+    async def poll_source(self,url,session):
+        if not self.config.get('enabled') or session!=self.target:return
+        source=next((s for s in self.sources['feeds'] if s['url']==url),None)
+        if source is None:return
+        try:
+            self.http.begin_poll(source)
+            raw,_=await asyncio.to_thread(self.collector.download,url,source,self.sources)
+            items=await self._rss().poll_rss(url,num=100,after_timestamp=0,after_link='',content=raw)
+            if not items:raise ValueError('RSS returned no usable entries; baseline preserved')
+            await self.ingest(url,session,items)
+        except DeferredRequest as exc:
+            if exc.status is not None or self.http.available_at(source)>time.time():self.source_errors[source['id']]=str(exc)
+            self._poll_result(source,'deferred',str(exc),exc.retry_at,exc.status)
+        except Exception as exc:
+            self.source_errors[source['id']]=type(exc).__name__+': '+str(exc)[:160]
+            self._poll_result(source,'failed',self.source_errors[source['id']])
+
+    def _poll_result(self,source,outcome,reason,retry_at=None,http_status=None):
+        row={'source_id':source['id'],'url':source['url'],'checked_at':datetime.now(timezone.utc).isoformat(),'outcome':outcome,'reason':reason,'retry_at':retry_at,'http_status':http_status,'poll_minutes':source.get('poll_minutes',30),'rss_items':0,'candidate_rows':0,'enqueued':0}
+        with self.poll_log.open('a',encoding='utf-8') as stream:stream.write(json.dumps(row,ensure_ascii=False)+'\n')
+        logger.info('Market News poll source=%s outcome=%s reason=%s retry_at=%s',source['id'],outcome,reason,retry_at)
         self.status()
 
     async def _poll_now(self):
@@ -184,15 +217,21 @@ class MarketNews(Star):
             return
         if not payload.get('test_mode') and time.time()-job['created']>self.config.get('max_queue_age_minutes',120)*60:
             self.inbox.update(job_id,'EXPIRED',error='News exceeded processing queue age limit');return
+        source=next(s for s in self.sources['feeds'] if s['id']==payload['source_id'])
+        available=self.http.available_at(source)
+        if available>time.time():
+            self.inbox.update(job_id,'QUEUED',error='Source HTTP cooldown',next_try=available);return
         self.inbox.update(job_id,'RUNNING',claim=True)
         date=payload.get('date') or datetime.now(ZoneInfo('Asia/Shanghai')).strftime('%Y-%m-%d')
-        source=next(s for s in self.sources['feeds'] if s['id']==payload['source_id'])
         article=payload.get('article')
         if not article or not article.get('text_path') or not (self.workspace/article['text_path']).is_file():
             attempt=job['attempts']+1
             batch=self.workspace/'data/raw'/date/(job_id+'-a'+str(attempt))
             for name in ('html','articles'):(batch/name).mkdir(parents=True,exist_ok=True)
             article=await asyncio.to_thread(self.collector.retrieve,payload,source,self.sources,batch)
+            if article.get('retry_at'):
+                self.inbox.db.execute('UPDATE jobs SET attempts=MAX(0,attempts-1) WHERE id=?',(job_id,))
+                self.inbox.update(job_id,'QUEUED',error=article.get('error'),next_try=article['retry_at']);return
             if article.get('content_level') not in ('full_text','partial_text','summary_only') or not article.get('text_path'):
                 raise RuntimeError('Article body unavailable: '+str(article.get('error',article.get('content_level'))))
         paths={
@@ -232,7 +271,7 @@ class MarketNews(Star):
     async def market_status(self,event:AstrMessageEvent):
         if event.unified_msg_origin!=self.target:return
         status=self.status()
-        yield event.plain_result('新闻监测已启用；每两分钟检查。\nRSS订阅：'+str(len(self.sources['feeds']))+'；网站：'+str(len({source['domains'][0] for source in self.sources['feeds']}))+'\n基线来源：'+str(len(status['feeds']))+'；暂停：'+str(len(status['paused_feeds']))+'\n任务状态：'+json.dumps(status['jobs'],ensure_ascii=False)+'\n当前任务：'+str(status['running_job']))
+        yield event.plain_result('新闻监测已启用；按来源分档轮询（5～60分钟），同站错峰并执行HTTP退避。\nRSS订阅：'+str(len(self.sources['feeds']))+'；网站：'+str(len({source['domains'][0] for source in self.sources['feeds']}))+'\n基线来源：'+str(len(status['feeds']))+'；暂停：'+str(len(status['paused_feeds']))+'\n任务状态：'+json.dumps(status['jobs'],ensure_ascii=False)+'\n当前任务：'+str(status['running_job']))
 
     @market.command('check')
     async def market_check(self,event:AstrMessageEvent):
