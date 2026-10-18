@@ -43,6 +43,12 @@ class MarketNews(Star):
         else:
             self.source_errors['startup']='Waiting for RSS plugin and target WeChat adapter'
             self.status();return
+        paused_urls={source['url'] for source in self.sources.get('paused_feeds',[])}
+        for url, record in list(rss.data_handler.data.items()):
+            if not isinstance(record,dict) or 'subscribers' not in record:continue
+            if self.target in record['subscribers'] and url in paused_urls:
+                record['subscribers'].pop(self.target,None)
+                if not record['subscribers']:rss.data_handler.data.pop(url,None)
         for source in self.sources['feeds']:
             record=rss.data_handler.data.setdefault(source['url'],{'info':{'title':source['name'],'description':'Financial source managed by Market News bridge'},'subscribers':{}})
             record['subscribers'][self.target]={'cron_expr':self.config.get('poll_cron','*/2 * * * *'),'last_update':int(time.time()),'latest_link':''}
@@ -61,6 +67,10 @@ class MarketNews(Star):
 
     def status(self):
         value={'updated_at':datetime.now(timezone.utc).isoformat(),'enabled':bool(self.config.get('enabled')),'running_job':self.running,'poll_cron':self.config.get('poll_cron'),'source_errors':self.source_errors,**self.inbox.summary()}
+        active_urls={source['url'] for source in self.sources['feeds']}
+        value['feeds']=[record for record in value['feeds'] if record['url'] in active_urls]
+        value['configured_feeds']=len(self.sources['feeds'])
+        value['paused_feeds']=[{'id':source['id'],'reason':source.get('reason')} for source in self.sources.get('paused_feeds',[])]
         target=self.workspace/'runs/monitor-status.json';target.parent.mkdir(parents=True,exist_ok=True)
         temporary=target.with_suffix('.tmp');temporary.write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n',encoding='utf-8');temporary.replace(target)
         return value
@@ -222,7 +232,7 @@ class MarketNews(Star):
     async def market_status(self,event:AstrMessageEvent):
         if event.unified_msg_origin!=self.target:return
         status=self.status()
-        yield event.plain_result('新闻监测已启用；每两分钟检查。\nRSS订阅：'+str(len(self.sources['feeds']))+'；网站：'+str(len({source['domains'][0] for source in self.sources['feeds']}))+'\n基线来源：'+str(len(status['feeds']))+'\n任务状态：'+json.dumps(status['jobs'],ensure_ascii=False)+'\n当前任务：'+str(status['running_job']))
+        yield event.plain_result('新闻监测已启用；每两分钟检查。\nRSS订阅：'+str(len(self.sources['feeds']))+'；网站：'+str(len({source['domains'][0] for source in self.sources['feeds']}))+'\n基线来源：'+str(len(status['feeds']))+'；暂停：'+str(len(status['paused_feeds']))+'\n任务状态：'+json.dumps(status['jobs'],ensure_ascii=False)+'\n当前任务：'+str(status['running_job']))
 
     @market.command('check')
     async def market_check(self,event:AstrMessageEvent):

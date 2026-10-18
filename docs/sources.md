@@ -8,11 +8,11 @@
 
 | 类别 | 搜索重点 | 首选来源 |
 |---|---|---|
-| 国际黄金 | 黄金、XAU、美元、利率和直接相关事件 | FXStreet、investingLive、MarketPulse；美联储、ECB 原始公告作补充依据 |
-| 白银 | 白银、XAG、工业需求和直接相关事件 | FXStreet；相关官方公告 |
-| 原油 | WTI、Brent、供需、库存、OPEC | OilPrice、EIA、FXStreet、investingLive；必要时搜索 OPEC 原始页面 |
-| 外汇直盘 | 七大美元直盘及相关央行政策、统计 | FXStreet、investingLive、MarketPulse；美联储、ECB |
-| 交叉盘 | 具体交叉盘，以及组成货币的事件 | FXStreet、investingLive 技术分析；对应央行和统计机构 |
+| 国际黄金 | 黄金、XAU、美元、利率和直接相关事件 | FXEmpire、GoldSeek、investingLive、MarketPulse；美联储、ECB 原始公告作补充依据 |
+| 白银 | 白银、XAG、工业需求和直接相关事件 | SilverSeek、FXEmpire、GoldSeek；相关官方公告 |
+| 原油 | WTI、Brent、供需、库存、OPEC | OilPrice、EIA、FXEmpire、investingLive；必要时搜索 OPEC 原始页面 |
+| 外汇直盘 | 七大美元直盘及相关央行政策、统计 | ExchangeRates、FXEmpire、investingLive、MarketPulse；美联储、ECB |
+| 交叉盘 | 具体交叉盘，以及组成货币的事件 | ExchangeRates、FXEmpire、investingLive 技术分析；对应央行和统计机构 |
 
 关键词只是发现线索。Agent 阅读后决定真实相关性，不因词语出现就一定采用。
 固定源未覆盖某类时，可以使用已有搜索或网页工具补充，保留原始来源和发布时间。
@@ -20,8 +20,8 @@
 
 ## 已验证的 RSS 扩展
 
-当前是 9 个 RSS 订阅、7 个网站。investingLive 使用新闻、技术分析和央行动态三个独立订阅。
-2026-10-19 已在实例环境验证新增 RSS 的条目、带时区发布时间和样例正文；详情见 `docs/source-validation.md`。
+当前启用 12 个 RSS 订阅、10 个网站；另保留 1 个暂停来源（FXStreet）。investingLive 使用新闻、技术分析和央行动态三个独立订阅。
+2026-10-19 两轮扩展均验证 RSS、带时区发布时间和样例正文；详情见 `docs/source-validation.md`。
 
 - investingLive：使用 `.article-body-normal`，只提取正文区域；支持短快讯，不把导航或页脚当正文。
 - OilPrice：使用 `#article-content` 提取正文，排除作者侧栏。
@@ -32,7 +32,19 @@
 
 Investing.com 本次 RSS 缺少时区且样例正文返回 403，因此未启用。
 金十、财联社和 Newsquawk 未发现已验证可用的公开 RSS；Rigzone 和 Kitco 本次候选地址也未通过验证。
-现有 FXStreet 本次返回 403，保留来源与错误状态，未绕过访问限制。
+FXStreet 持续返回 403，已移到 `paused_feeds`，不参与有效轮询；未绕过访问限制。
+
+## 第二轮新增与暂停来源
+
+- FXEmpire Forecasts：外汇、贵金属与商品预测；这是作者分析，不当成已证实事实。
+- ExchangeRates：直盘、交叉盘和机构汇率观点，保留预测主体和时点。
+- GoldSeek／SilverSeek：贵金属评论与持仓资料；包含观点和公司公告，不保证分钟级更新。
+- SilverSeek 表格按行保留列分隔符，避免白银持仓报告只剩作者简介或丢失表头。
+- 同一订阅内部重复链接继续按现有唯一键去重。
+
+MINING.COM Gold 初测可读，但上线前两次复测 RSS 均返回 403，因此本次不启用。
+本次没有启用正文受限的 CNBC、返回 403 的 FXLeaders／FXCM、返回 404 的 DailyForex 候选订阅，也没有启用最近新闻停在 8 月的 FXEmpire News。
+ForexCrunch 主订阅可读，但最近内容偏加密资产，本轮不启用。
 
 ## 怎么取
 
@@ -85,17 +97,6 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
   "timeout_seconds": 15,
   "max_response_bytes": 4000000,
   "feeds": [
-    {
-      "id": "fxstreet",
-      "name": "FXStreet",
-      "url": "https://www.fxstreet.com/rss/news",
-      "domains": [
-        "www.fxstreet.com"
-      ],
-      "selectors": [
-        "article"
-      ]
-    },
     {
       "id": "fed",
       "name": "美联储",
@@ -200,6 +201,58 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       "selectors": [
         ".post-body"
       ]
+    },
+    {
+      "id": "fxempire_forecasts",
+      "name": "FXEmpire Forecasts",
+      "url": "https://www.fxempire.com/api/v1/en/articles/rss/forecasts",
+      "domains": [
+        "www.fxempire.com",
+        "fxempire.com"
+      ],
+      "selectors": [
+        "article"
+      ]
+    },
+    {
+      "id": "exchangerates",
+      "name": "ExchangeRates Currency News",
+      "url": "https://www.exchangerates.org.uk/news/rss.xml",
+      "domains": [
+        "www.exchangerates.org.uk",
+        "exchangerates.org.uk"
+      ],
+      "selectors": [
+        ".erukNewsBody"
+      ]
+    },
+    {
+      "id": "goldseek",
+      "name": "GoldSeek",
+      "url": "https://www.goldseek.com/rss.xml",
+      "domains": [
+        "goldseek.com",
+        "www.goldseek.com"
+      ],
+      "selectors": [
+        ".article-text .text-long"
+      ]
+    },
+    {
+      "id": "silverseek",
+      "name": "SilverSeek",
+      "url": "https://www.silverseek.com/rss.xml",
+      "domains": [
+        "silverseek.com",
+        "www.silverseek.com"
+      ],
+      "selectors": [
+        ".article-text .text-long"
+      ],
+      "include_tables": true,
+      "min_paragraph_characters": 1,
+      "min_body_paragraphs": 3,
+      "min_body_characters": 200
     }
   ],
   "keywords": {
@@ -263,7 +316,13 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       "ecb",
       "boj",
       "boe",
-      "boc"
+      "boc",
+      "swiss",
+      "franc",
+      "pound",
+      "japanese yen",
+      "exchange rate",
+      "interest rate"
     ],
     "交叉盘": [
       "eur/jpy",
@@ -291,6 +350,20 @@ EIA 是能源综合源，光伏和电力文章可能不符合原油范围；Agen
       "cross-currency",
       "交叉盘"
     ]
-  }
+  },
+  "paused_feeds": [
+    {
+      "id": "fxstreet",
+      "name": "FXStreet",
+      "url": "https://www.fxstreet.com/rss/news",
+      "domains": [
+        "www.fxstreet.com"
+      ],
+      "selectors": [
+        "article"
+      ],
+      "reason": "RSS and article samples repeatedly returned HTTP 403 on 2026-10-19; excluded from active polling until verified recovery"
+    }
+  ]
 }
 ```

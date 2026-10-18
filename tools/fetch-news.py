@@ -141,8 +141,13 @@ def clean_body(raw, source):
     container = next((soup.select_one(selector) for selector in source['selectors'] if soup.select_one(selector)), None)
     paragraphs = []
     if container:
-        for element in container.find_all(['p', 'h2', 'h3', 'li']):
-            text = ' '.join(element.get_text(' ', strip=True).split())
+        tags = ['p', 'h2', 'h3', 'li'] + (['tr'] if source.get('include_tables') else [])
+        for element in container.find_all(tags):
+            if element.name == 'tr':
+                cells = element.find_all(['th', 'td'], recursive=False)
+                text = ' | '.join(' '.join(cell.get_text(' ', strip=True).split()) for cell in cells)
+            else:
+                text = ' '.join(element.get_text(' ', strip=True).split())
             if len(text) >= source.get('min_paragraph_characters', 40) and text not in paragraphs:
                 paragraphs.append(text)
     good = (len(paragraphs) >= source.get('min_body_paragraphs', 3)
